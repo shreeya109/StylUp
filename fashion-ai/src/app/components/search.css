@@ -939,3 +939,81 @@ select:focus {
   color: #1f2937;
 }
 
+.outfit-suggestions-section {
+  margin: 2rem 0;
+}
+
+.outfits-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.outfit-card {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+}
+
+.outfit-card h3 {
+  margin: 0 0 0.5rem 0;
+  color: #1f2937;
+}
+
+.outfit-description {
+  color: #6b7280;
+  margin-bottom: 1rem;
+}
+
+.outfit-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.outfit-item {
+  width: 80px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.outfit-item:hover {
+  transform: scale(1.05);
+}
+
+.outfit-item-image {
+  width: 100%;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.outfit-item-details h4 {
+  font-size: 0.75rem;
+  margin: 0.25rem 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outfit-item-details .price {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #059669;
+  margin: 0;
+}
+
+.outfit-total {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: #1f2937;
+  text-align: center;
+  padding: 0.5rem;
+  background: #f3f4f6;
+  border-radius: 6px;
+}
+

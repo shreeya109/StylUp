@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import "./search.css";
+import { Category, CategorizedResults, OutfitSuggestion } from "../lib/types";
 
 export default function FashionSearch() {
   type EbayItem = {
@@ -38,6 +39,14 @@ export default function FashionSearch() {
   const [queries, setQueries] = useState<string[]>([]);
   const [finalResults, setFinalResults] = useState<EbayItem[]>([]);
   const [results, setResults] = useState<EbayItem[]>([]);
+  const [outfitSuggestions, setOutfitSuggestions] = useState<OutfitSuggestion[]>([]);
+  const [categorized, setCategorized] = useState<CategorizedResults>({
+  top: [],
+  bottom: [],
+  jacket: [],
+  footwear: [],
+  accessory: []
+});
 
   const [filters, setFilters] = useState<FilterOptions>({
     minPrice: "",
@@ -144,11 +153,19 @@ export default function FashionSearch() {
     setLoading(false);
   };
 
+  const handleCategorize = async(item: EbayItem, category: Category) => {
+  setCategorized(prev => ({
+    ...prev,
+    [category]: [...prev[category], item]
+  }));
+}
+
   const handleSearch = async (keywordsOverride?: string[], currentImageIndex: number = 0) => {
     const effectiveKeywords = keywordsOverride || keywords;
     if (effectiveKeywords.length === 0) return;
 
     setLoading(true);
+    const itemCategory = effectiveKeywords[0];
 
     const searchQuery = effectiveKeywords.join(" ");
     console.log(searchQuery);
@@ -188,8 +205,15 @@ export default function FashionSearch() {
         const response = (await clipRes.json()) as import("../lib/types").ClipRerankResponse;
         
         if (response.items) {
+          const topTwo = response.items.slice(0, 2);
+          await handleCategorize(topTwo[0], itemCategory as Category);
+          if (topTwo[1]) await handleCategorize(topTwo[1], itemCategory as Category);
+          
+          console.log("HANDLE CATEGORIZE", categorized);
           setResults(prev => [...prev, ...response.items]);
           setFinalResults(prev => [...prev, ...response.items]);
+
+          
           setClipDebugInfo(response.debug);
           
           console.log('CLIP Debug Info:', response.debug);
@@ -463,6 +487,8 @@ export default function FashionSearch() {
               {error}
             </div>
           )}
+
+          <h2>Outfit Suggestions</h2>
 
           <h2>Original Results</h2>
           {originalResults.length > 0 && (

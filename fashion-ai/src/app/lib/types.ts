@@ -8,23 +8,26 @@ export type EbayItem = {
   clipSimilarity?: number;
 };
 
+export type Category = 'top' | 'bottom' | 'footwear' | 'jacket' | 'accessory';
+
 export type CategorizedItem = EbayItem & {
-  category: string;
+  category: Category;
 };
 
 export type OutfitSuggestion = {
   name: string;
-  items: CategorizedItem[];
+  items: EbayItem[];
   totalPrice?: number;
   description: string;
 };
 
+
 export type CategorizedResults = {
-  top: CategorizedItem[];
-  bottom: CategorizedItem[];
-  jacket: CategorizedItem[];
-  footwear: CategorizedItem[];
-  accessory: CategorizedItem[];
+  top: EbayItem[];
+  bottom: EbayItem[];
+  jacket: EbayItem[];
+  footwear: EbayItem[];
+  accessory: EbayItem[];
 };
 
 export type SearchEbayResponse = { itemSummaries: EbayItem[] };
