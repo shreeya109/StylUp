@@ -3,6 +3,8 @@
 import { useState } from "react";
 import "./search.css";
 import { Category, CategorizedResults, OutfitSuggestion } from "../lib/types";
+import { useEffect } from "react";
+import { generateOutfits } from "../lib/outfitBuilder";
 
 export default function FashionSearch() {
   type EbayItem = {
@@ -57,6 +59,18 @@ export default function FashionSearch() {
     condition: "all",
     sortBy: "relevance"
   });
+
+  // Add this useEffect after your state declarations
+useEffect(() => {
+  const hasItems = Object.values(categorized).some(items => items.length > 0);
+  
+  if (hasItems) {
+    console.log("Generating outfits from categorized items:", categorized);
+    const outfits = generateOutfits(categorized);
+    console.log("Generated outfits:", outfits);
+    setOutfitSuggestions(outfits);
+  }
+}, [categorized]);
 
   const colorOptions = ["Black", "White", "Red", "Blue", "Green", "Yellow", "Pink", "Purple", "Gray", "Brown"];
   const sizeOptions = ["XS", "S", "M", "L", "XL", "XXL"];
@@ -489,6 +503,43 @@ export default function FashionSearch() {
           )}
 
           <h2>Outfit Suggestions</h2>
+          {/* Add this right after <h2>Outfit Suggestions</h2> */}
+          {outfitSuggestions.length > 0 && (
+            <section className="outfit-suggestions-section">
+              <div className="outfits-grid">
+                {outfitSuggestions.map((outfit, index) => (
+                  <div key={index} className="outfit-card">
+                    <h3>{outfit.name}</h3>
+                    <p className="outfit-description">{outfit.description}</p>
+                    
+                    <div className="outfit-items">
+                      {outfit.items.map((item, itemIndex) => (
+                        <div key={itemIndex} className="outfit-item">
+                          <img 
+                            src={item.image?.imageUrl || "/placeholder.png"} 
+                            alt={item.title}
+                            className="outfit-item-image"
+                          />
+                          <div className="outfit-item-details">
+                            <h4>{item.title}</h4>
+                            <p className="price">
+                              {item.price?.currency === 'USD' ? '$' : item.price?.currency} {item.price?.value}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {outfit.totalPrice && (
+                      <div className="outfit-total">
+                        Total: ${outfit.totalPrice.toFixed(2)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           <h2>Original Results</h2>
           {originalResults.length > 0 && (
