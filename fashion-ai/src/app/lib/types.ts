@@ -5,6 +5,26 @@ export type EbayItem = {
   image?: { imageUrl: string };
   webUrl?: string;
   itemId?: string;
+  clipSimilarity?: number;
+};
+
+export type CategorizedItem = EbayItem & {
+  category: string;
+};
+
+export type OutfitSuggestion = {
+  name: string;
+  items: CategorizedItem[];
+  totalPrice?: number;
+  description: string;
+};
+
+export type CategorizedResults = {
+  top: CategorizedItem[];
+  bottom: CategorizedItem[];
+  jacket: CategorizedItem[];
+  footwear: CategorizedItem[];
+  accessory: CategorizedItem[];
 };
 
 export type SearchEbayResponse = { itemSummaries: EbayItem[] };

@@ -1,6 +1,29 @@
-// /app/api/test-upload-embedding/route.ts
+// /app/api/clip-rerank/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getImageEmbedding, cosineSimilarity } from "../../lib/clip";
+import { getImageEmbedding } from "../../lib/clip";
+
+// Cosine similarity function
+function cosineSimilarity(a: Float32Array, b: Float32Array): number {
+  if (a.length !== b.length) {
+    throw new Error("Vectors must have the same length");
+  }
+  
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  
+  if (normA === 0 || normB === 0) {
+    return 0;
+  }
+  
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
 
 // Calculate position changes between original and reranked arrays
 function calculatePositionChanges<T>(original: T[], reranked: T[]): number {
@@ -20,27 +43,27 @@ function calculatePositionChanges<T>(original: T[], reranked: T[]): number {
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
-
-    //uploaded images
-    const imageFiles = formData.getAll('images') as File[];
-
-    //Get ebay files
+    
+    // Get uploaded image (single file)
+    const imageFile = formData.get('image') as File;
+    
+    // Get eBay items
     const ebayItemsStr = formData.get('ebayItems') as string;
     if (!ebayItemsStr) {
       return NextResponse.json({ error: "Missing ebayItems" }, { status: 400 });
     }
     
     const ebayItems = JSON.parse(ebayItemsStr);
-
-    if (!imageFiles.length || !ebayItems?.length) {
-      return NextResponse.json({ error: "Missing images or eBay items" }, { status: 400 });
+    
+    if (!imageFile || !ebayItems?.length) {
+      return NextResponse.json({ error: "Missing image or eBay items" }, { status: 400 });
     }
 
-    console.log(`🎯 CLIP reranking: ${imageFiles.length} inspiration images, ${ebayItems.length} eBay items`);
+    console.log(`CLIP reranking: Using inspiration image, ${ebayItems.length} eBay items`);
 
     // Debug info object
     const debugInfo = {
-      uploadedImages: imageFiles.length,
+      uploadedImages: 1,
       validInspiration: 0,
       totalItems: ebayItems.length,
       validEbayEmbeddings: 0,
@@ -50,10 +73,10 @@ export async function POST(req: NextRequest) {
       rerankEffectiveness: 0
     };
 
-    // Step 1: Process only the first inspiration image
+    // Step 1: Process the inspiration image
     let inspirationEmbedding: Float32Array;
     try {
-      inspirationEmbedding = await getImageEmbedding(imageFiles[0]);
+      inspirationEmbedding = await getImageEmbedding(imageFile);
       debugInfo.validInspiration = 1;
     } catch (error) {
       console.error("Failed to process inspiration image:", error);
@@ -123,8 +146,6 @@ export async function POST(req: NextRequest) {
       debug: debugInfo
     });
 
-
-
   } catch (error: any) {
     console.error("CLIP rerank error:", error);
     return NextResponse.json({ 
@@ -133,19 +154,3 @@ export async function POST(req: NextRequest) {
     }, { status: 500 });
   }
 }
-// export async function POST(req: NextRequest) {
-//   try {
-//     const formData = await req.formData();
-//     const file = formData.get("image");
-
-//     if (!file || !(file instanceof Blob)) {
-//       return NextResponse.json({ error: "No valid image file received" }, { status: 400 });
-//     }
-
-//     const embedding = await getImageEmbedding(file);
-//     return NextResponse.json({ embedding: Array.from(embedding) }); // Truncate for debug
-//   } catch (err: any) {
-//     console.error("Embedding upload error:", err);
-//     return NextResponse.json({ error: "Failed to embed uploaded image" }, { status: 500 });
-//   }
-// }

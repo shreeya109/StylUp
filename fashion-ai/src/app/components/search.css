@@ -888,3 +888,54 @@ select:focus {
     height: 40px;
   }
 }
+
+/* Add these styles to your existing search.css file */
+
+/* Similarity score styling */
+.similarity-score {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Debug section styling */
+.debug-section {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: #f8f9fa;
+  border-radius: 12px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.9rem;
+  border: 1px solid #e9ecef;
+}
+
+.debug-section h3 {
+  margin: 0 0 1rem 0;
+  color: #374151;
+  font-family: inherit;
+}
+
+.debug-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.debug-grid > div {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.debug-grid strong {
+  color: #1f2937;
+}
+

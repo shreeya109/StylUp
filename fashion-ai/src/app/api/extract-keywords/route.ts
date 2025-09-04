@@ -24,7 +24,7 @@ export async function POST(req:NextRequest) {
             content: [
             {
             type: "text",
-            text: "You are a fashion stylist. List 3-5 fashion-related keywords (e.g. ‘leather jacket’, ‘white sneakers’, ‘oversized hoodie’) you observe in this image. Be concise."
+            text: "You are a fashion stylist. List 3-5 fashion-related keywords (e.g. ‘leather jacket’, ‘white sneakers’, ‘oversized hoodie’) you observe in this image. Be concise. Only focus on the main piece of clothing visible in the image. Make sure the structure of the response is a list. List items should just be words wihout any special characters. The first word should be the category of the item which can be one of the following - top, bottom, footwear, jacket, accessory"
             },
             {
             type: "image_url",
@@ -41,6 +41,7 @@ export async function POST(req:NextRequest) {
         .split(/,|\n|\r|\*/)
         .map((k) => k.trim())
         .filter(Boolean);
+        console.log(keywords)
 
         return NextResponse.json({ keywords });
         } catch (err) {

@@ -28,13 +28,16 @@ export default function FashionSearch() {
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [keywords, setKeywords] = useState<string[]>([]);
-  const [results, setResults] = useState<EbayItem[]>([]);
+  const [imageIndex, setImageIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [shapesAnimated, setShapesAnimated] = useState(false);
   const [clipDebugInfo, setClipDebugInfo] = useState<any>(null);
   const [originalResults, setOriginalResults] = useState<EbayItem[]>([]);
+  const [queries, setQueries] = useState<string[]>([]);
+  const [finalResults, setFinalResults] = useState<EbayItem[]>([]);
+  const [results, setResults] = useState<EbayItem[]>([]);
 
   const [filters, setFilters] = useState<FilterOptions>({
     minPrice: "",
@@ -64,7 +67,7 @@ export default function FashionSearch() {
 
     animateShapes();
 
-    const newImages = [...images, ...files].slice(0, 20); // ✅ max 20
+    const newImages = [...images, ...files].slice(0, 20);
     setImages(newImages);
 
     const newPreviews: string[] = [];
@@ -81,6 +84,10 @@ export default function FashionSearch() {
 
     setKeywords([]);
     setError("");
+    // Reset results when new images are added
+    setResults([]);
+    setFinalResults([]);
+    setOriginalResults([]);
   };
 
   const removeImage = (index: number) => {
@@ -95,6 +102,9 @@ export default function FashionSearch() {
     setLoading(true);
     setKeywords([]);
     setError("");
+    setResults([]);
+    setFinalResults([]);
+    setOriginalResults([]);
 
     let allKeywords: string[] = [];
 
@@ -109,36 +119,39 @@ export default function FashionSearch() {
         });
 
         const data = await res.json();
+        console.log("data:", data);
 
         if (data.keywords) {
-          allKeywords = [...allKeywords, ...data.keywords];
+          allKeywords = [...data.keywords];
         } else {
           console.warn(`Error from image ${i + 1}:`, data.error);
         }
       } catch (err) {
         console.error("Error uploading image:", i + 1, err);
       }
-    }
 
-    const uniqueKeywords = Array.from(new Set(allKeywords)); // ✅ de-duplicate
-    setKeywords(uniqueKeywords);
+      const uniqueKeywords = Array.from(new Set(allKeywords));
+      setKeywords(uniqueKeywords);
 
-    if (uniqueKeywords.length > 0) {
-      setTimeout(() => handleSearch(uniqueKeywords), 0); // ✅ auto search
-    } else {
-      setError("No keywords found from uploaded images.");
+      if (uniqueKeywords.length > 0) {
+        setImageIndex(i);
+        setTimeout(() => handleSearch(uniqueKeywords, i), 0);
+      } else {
+        setError("No keywords found from uploaded images.");
+      }
     }
 
     setLoading(false);
   };
 
-  const handleSearch = async (keywordsOverride?: string[]) => {
+  const handleSearch = async (keywordsOverride?: string[], currentImageIndex: number = 0) => {
     const effectiveKeywords = keywordsOverride || keywords;
     if (effectiveKeywords.length === 0) return;
 
     setLoading(true);
 
     const searchQuery = effectiveKeywords.join(" ");
+    console.log(searchQuery);
     const queryParams = new URLSearchParams({
       q: searchQuery,
       minPrice: filters.minPrice,
@@ -154,15 +167,18 @@ export default function FashionSearch() {
       const ebayItems = data.itemSummaries || [];
 
       if (ebayItems.length === 0 || imagePreviews.length === 0) {
-        setResults(ebayItems);
+        setResults(prev => [...prev, ...ebayItems]);
+        setFinalResults(prev => [...prev, ...ebayItems]);
         return;
       }
 
-      setOriginalResults(ebayItems);
+      setOriginalResults(prev => [...prev, ...ebayItems]);
+      
       try {
         const form = new FormData();
-        images.forEach((file, i) => form.append('images', file, file.name || `image_${i}.jpg`));
+        form.append('image', images[currentImageIndex]);
         form.append('ebayItems', JSON.stringify(ebayItems));
+        console.log("FORM: ", form);
 
         const clipRes = await fetch("/api/clip-rerank", {
           method: "POST",
@@ -171,26 +187,26 @@ export default function FashionSearch() {
 
         const response = (await clipRes.json()) as import("../lib/types").ClipRerankResponse;
         
-        // Handle the new response format
         if (response.items) {
-          console.log("Response items: ", response.items)
-          setResults(response.items);
+          setResults(prev => [...prev, ...response.items]);
+          setFinalResults(prev => [...prev, ...response.items]);
           setClipDebugInfo(response.debug);
           
           console.log('CLIP Debug Info:', response.debug);
           
-          // Log key metrics
           if (response.debug) {
-            console.log(`✅ CLIP processed ${response.debug.validEbayEmbeddings}/${response.debug.totalItems} items`);
-            console.log(`📊 Score range: ${response.debug.scoreStats?.min?.toFixed(4)} - ${response.debug.scoreStats?.max?.toFixed(4)}`);
-            console.log(`🔄 Position changes: ${response.debug.positionChanges}`);
+            console.log(`CLIP processed ${response.debug.validEbayEmbeddings}/${response.debug.totalItems} items`);
+            console.log(`Score range: ${response.debug.scoreStats?.min?.toFixed(4)} - ${response.debug.scoreStats?.max?.toFixed(4)}`);
+            console.log(`Position changes: ${response.debug.positionChanges}`);
           }
         } else {
-          setResults(ebayItems); // fallback
+          setResults(prev => [...prev, ...ebayItems]);
+          setFinalResults(prev => [...prev, ...ebayItems]);
         }
       } catch (err) {
         console.error("CLIP rerank failed:", err);
-        setResults(ebayItems); // fallback
+        setResults(prev => [...prev, ...ebayItems]);
+        setFinalResults(prev => [...prev, ...ebayItems]);
       }
     } catch (err) {
       setError("Search failed");
@@ -213,9 +229,8 @@ export default function FashionSearch() {
   };
 
   function getRerankChangeCount(original: EbayItem[], reranked: EbayItem[]) {
-  return original.filter((item, i) => reranked[i] !== item).length;
-}
-
+    return original.filter((item, i) => reranked[i] !== item).length;
+  }
 
   return (
     <>
@@ -449,7 +464,7 @@ export default function FashionSearch() {
             </div>
           )}
 
-          <h2> OG results</h2>
+          <h2>Original Results</h2>
           {originalResults.length > 0 && (
             <section className="results-section">
               <h3>{originalResults.length} Similar Items Found</h3>
@@ -462,7 +477,7 @@ export default function FashionSearch() {
                         alt={item.title}
                         className="result-image"
                       />
-                      Original rank: #{originalResults.findIndex(o => o === item) + 1}
+                      <div>Original rank: #{index + 1}</div>
                     </div>
                     <div className="item-details">
                       <h4 className="item-title">{item.title}</h4>
@@ -479,8 +494,7 @@ export default function FashionSearch() {
           )}
 
           {/* Results Section */}
-          <h2> CLIP results</h2>
-          
+          <h2>CLIP Reranked Results</h2>
           {results.length > 0 && (
             <section className="results-section">
               <h3>{results.length} Similar Items Found</h3>
@@ -493,6 +507,7 @@ export default function FashionSearch() {
                         alt={item.title}
                         className="result-image"
                       />
+                      <div>CLIP rank: #{index + 1}</div>
                     </div>
                     <div className="item-details">
                       <h4 className="item-title">{item.title}</h4>
@@ -508,7 +523,6 @@ export default function FashionSearch() {
             </section>
           )}
 
-          
           {originalResults.length > 0 && results.length > 0 && (
             <div style={{ margin: "1rem 0", fontWeight: "bold" }}>
               🔍 {getRerankChangeCount(originalResults, results)} items changed position after CLIP rerank
@@ -567,9 +581,6 @@ export default function FashionSearch() {
               </div>
             </section>
           )}
-
-          
-
         </main>
       </div>
     </>
