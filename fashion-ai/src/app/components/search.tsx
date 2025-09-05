@@ -2,21 +2,12 @@
 
 import { useState } from "react";
 import "./search.css";
-import { Category, CategorizedResults, OutfitSuggestion } from "../lib/types";
+import { Category, CategorizedResults, OutfitSuggestion, EbayItem} from "../lib/types";
 import { useEffect } from "react";
 import { generateOutfits } from "../lib/outfitBuilder";
 
 export default function FashionSearch() {
-  type EbayItem = {
-    title: string;
-    price?: {
-      value: string;
-      currency: string;
-    };
-    image?: {
-      imageUrl: string;
-    };
-  };
+  
 
   type FilterOptions = {
     minPrice: string;
@@ -196,6 +187,10 @@ useEffect(() => {
       const res = await fetch(`/api/search-ebay?${queryParams}`);
       const data = (await res.json()) as import("../lib/types").SearchEbayResponse;
       const ebayItems = data.itemSummaries || [];
+      console.log("_____________________")
+      console.log("EBAY RESPONSE STRUCTURE", ebayItems)
+      console.log("_____________________")
+
 
       if (ebayItems.length === 0 || imagePreviews.length === 0) {
         setResults(prev => [...prev, ...ebayItems]);
@@ -223,14 +218,11 @@ useEffect(() => {
           await handleCategorize(topTwo[0], itemCategory as Category);
           if (topTwo[1]) await handleCategorize(topTwo[1], itemCategory as Category);
           
-          console.log("HANDLE CATEGORIZE", categorized);
           setResults(prev => [...prev, ...response.items]);
           setFinalResults(prev => [...prev, ...response.items]);
-
-          
           setClipDebugInfo(response.debug);
           
-          console.log('CLIP Debug Info:', response.debug);
+          
           
           if (response.debug) {
             console.log(`CLIP processed ${response.debug.validEbayEmbeddings}/${response.debug.totalItems} items`);
@@ -504,37 +496,49 @@ useEffect(() => {
 
           <h2>Outfit Suggestions</h2>
           {/* Add this right after <h2>Outfit Suggestions</h2> */}
+          {/* Add this right after <h2>Outfit Suggestions</h2> */}
           {outfitSuggestions.length > 0 && (
             <section className="outfit-suggestions-section">
               <div className="outfits-grid">
                 {outfitSuggestions.map((outfit, index) => (
                   <div key={index} className="outfit-card">
-                    <h3>{outfit.name}</h3>
-                    <p className="outfit-description">{outfit.description}</p>
-                    
-                    <div className="outfit-items">
-                      {outfit.items.map((item, itemIndex) => (
-                        <div key={itemIndex} className="outfit-item">
-                          <img 
-                            src={item.image?.imageUrl || "/placeholder.png"} 
-                            alt={item.title}
-                            className="outfit-item-image"
-                          />
-                          <div className="outfit-item-details">
-                            <h4>{item.title}</h4>
-                            <p className="price">
-                              {item.price?.currency === 'USD' ? '$' : item.price?.currency} {item.price?.value}
-                            </p>
-                          </div>
+                    <div className="outfit-header">
+                      <div className="outfit-info">
+                        <h3>{outfit.name}</h3>
+                        <p className="outfit-description">{outfit.description}</p>
+                      </div>
+                      {outfit.totalPrice && (
+                        <div className="outfit-total">
+                          Total: ${outfit.totalPrice.toFixed(2)}
                         </div>
-                      ))}
+                      )}
                     </div>
                     
-                    {outfit.totalPrice && (
-                      <div className="outfit-total">
-                        Total: ${outfit.totalPrice.toFixed(2)}
+                    <div className="outfit-items-container">
+                      <div className="outfit-items">
+                        {outfit.items.map((item, itemIndex) => (
+                          <a 
+                            key={itemIndex} 
+                            href={item.webUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="outfit-item"
+                          >
+                            <img 
+                              src={item.image?.imageUrl || "/placeholder.png"} 
+                              alt={item.title}
+                              className="outfit-item-image"
+                            />
+                            <div className="outfit-item-details">
+                              <h4>{item.title}</h4>
+                              <p className="price">
+                                {item.price?.currency === 'USD' ? '$' : item.price?.currency} {item.price?.value}
+                              </p>
+                            </div>
+                          </a>
+                        ))}
                       </div>
-                    )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -549,11 +553,20 @@ useEffect(() => {
                 {originalResults.map((item, index) => (
                   <div key={index} className="result-card">
                     <div className="image-container">
-                      <img
+                      <a 
+                            key={index} 
+                            href={item.webUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="outfit-item"
+                          >
+                          <img
                         src={item.image?.imageUrl || "/placeholder.png"}
                         alt={item.title}
                         className="result-image"
                       />
+                          </a>
+                      
                       <div>Original rank: #{index + 1}</div>
                     </div>
                     <div className="item-details">
@@ -579,11 +592,19 @@ useEffect(() => {
                 {results.map((item, index) => (
                   <div key={index} className="result-card">
                     <div className="image-container">
-                      <img
+                      <a 
+                            key={index} 
+                            href={item.webUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="outfit-item"
+                          >
+                          <img
                         src={item.image?.imageUrl || "/placeholder.png"}
                         alt={item.title}
                         className="result-image"
                       />
+                          </a>
                       <div>CLIP rank: #{index + 1}</div>
                     </div>
                     <div className="item-details">

@@ -1,12 +1,15 @@
 // lib/types.ts
 export type EbayItem = {
-  title: string;
-  price?: { value: string; currency: string };
-  image?: { imageUrl: string };
-  webUrl?: string;
-  itemId?: string;
-  clipSimilarity?: number;
-};
+    title: string;
+    price?: {
+      value: string;
+      currency: string;
+    };
+    image?: {
+      imageUrl: string;
+    };
+    webUrl: string;
+  };
 
 export type Category = 'top' | 'bottom' | 'footwear' | 'jacket' | 'accessory';
 
