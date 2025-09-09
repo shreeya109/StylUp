@@ -1,24 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./search.css";
-import { Category, CategorizedResults, OutfitSuggestion, EbayItem} from "../lib/types";
-import { useEffect } from "react";
+import {
+  Category,
+  CategorizedResults,
+  OutfitSuggestion,
+  EbayItem,
+} from "../lib/types";
 import { generateOutfits } from "../lib/outfitBuilder";
 
+/**
+ * Aesthetic attrs we learn per item from /api/extract-categories
+ */
+type ItemAttrs = {
+  category?: Category;
+  colorCategory?: "neutrals" | "brights" | "earth" | "pastels";
+  formality?: "formal" | "casual" | "athletic";
+};
+
+type FilterOptions = {
+  minPrice: string;
+  maxPrice: string;
+  colors: string[];
+  sizes: string[];
+  brands: string[];
+  condition: string;
+  sortBy: string;
+};
+
 export default function FashionSearch() {
-  
-
-  type FilterOptions = {
-    minPrice: string;
-    maxPrice: string;
-    colors: string[];
-    sizes: string[];
-    brands: string[];
-    condition: string;
-    sortBy: string;
-  };
-
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [keywords, setKeywords] = useState<string[]>([]);
@@ -26,20 +37,26 @@ export default function FashionSearch() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showFilters, setShowFilters] = useState(false);
-  const [shapesAnimated, setShapesAnimated] = useState(false);
   const [clipDebugInfo, setClipDebugInfo] = useState<any>(null);
+
   const [originalResults, setOriginalResults] = useState<EbayItem[]>([]);
-  const [queries, setQueries] = useState<string[]>([]);
-  const [finalResults, setFinalResults] = useState<EbayItem[]>([]);
   const [results, setResults] = useState<EbayItem[]>([]);
-  const [outfitSuggestions, setOutfitSuggestions] = useState<OutfitSuggestion[]>([]);
+  const [finalResults, setFinalResults] = useState<EbayItem[]>([]);
+  const [outfitSuggestions, setOutfitSuggestions] = useState<OutfitSuggestion[]>(
+    []
+  );
+
+  // structural buckets for outfit builder
   const [categorized, setCategorized] = useState<CategorizedResults>({
-  top: [],
-  bottom: [],
-  jacket: [],
-  footwear: [],
-  accessory: []
-});
+    top: [],
+    bottom: [],
+    jacket: [],
+    footwear: [],
+    accessory: [],
+  });
+
+  // aesthetics by item (palette + vibe + normalized category)
+  const [itemAttrs, setItemAttrs] = useState<Record<string, ItemAttrs>>({});
 
   const [filters, setFilters] = useState<FilterOptions>({
     minPrice: "",
@@ -48,32 +65,77 @@ export default function FashionSearch() {
     sizes: [],
     brands: [],
     condition: "all",
-    sortBy: "relevance"
+    sortBy: "relevance",
   });
 
-  // Add this useEffect after your state declarations
-useEffect(() => {
-  const hasItems = Object.values(categorized).some(items => items.length > 0);
-  
-  if (hasItems) {
-    console.log("Generating outfits from categorized items:", categorized);
-    const outfits = generateOutfits(categorized);
-    console.log("Generated outfits:", outfits);
-    setOutfitSuggestions(outfits);
-  }
-}, [categorized]);
+  const colorOptions = [
+    "Black",
+    "White",
+    "Red",
+    "Blue",
+    "Green",
+    "Yellow",
+    "Pink",
+    "Purple",
+    "Gray",
+    "Brown",
+  ];
 
-  const colorOptions = ["Black", "White", "Red", "Blue", "Green", "Yellow", "Pink", "Purple", "Gray", "Brown"];
-  const sizeOptions = ["XS", "S", "M", "L", "XL", "XXL"];
-  const brandOptions = ["Nike", "Adidas", "Zara", "H&M", "Gucci", "Prada", "Louis Vuitton"];
+  // ------- Helpers -------
+
+  const getKey = (it: EbayItem) =>
+    it.webUrl || (it as any).itemId || `${it.title}-${it.image?.imageUrl}`;
+
+  const priceNumber = (it?: EbayItem) => {
+    if (!it?.price?.value) return 0;
+    const n = Number(it.price.value);
+    return Number.isFinite(n) ? n : 0;
+  };
 
   const animateShapes = () => {
-    const bgContainer = document.getElementById('bgContainer');
+    const bgContainer = document.getElementById("bgContainer");
     if (bgContainer) {
-      bgContainer.classList.add('animated');
-      setShapesAnimated(true);
+      bgContainer.classList.add("animated");
     }
   };
+
+  // Generate outfits whenever categories fill in. We also pass aesthetics + budget.
+  useEffect(() => {
+    const hasItems = Object.values(categorized).some((items) => items.length);
+    if (!hasItems) return;
+
+    const budgetMax =
+      Number.isFinite(Number(filters.maxPrice)) && filters.maxPrice !== ""
+        ? Number(filters.maxPrice)
+        : undefined;
+
+    const outfits = generateOutfits(
+      
+      categorized,
+      {
+        budgetMax,
+        maxOutfits: 8,
+        topKPerCategory: 6,
+        beamWidth: 40,
+        allowReuse: false,
+        // (Optional) seed a default vibe/palette bias based on user filters/UI later
+        // targetPalette: "neutrals",
+        // targetVibe: "casual",
+      },
+      // pass aesthetics for scoring
+      (item) => {
+        const attrs = itemAttrs[getKey(item)];
+        return {
+          palette: attrs?.colorCategory,
+          vibe: attrs?.formality,
+        };
+      }
+    );
+
+    setOutfitSuggestions(outfits);
+  }, [categorized, itemAttrs, filters.maxPrice]);
+
+  // ------- Image upload flow -------
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -87,8 +149,8 @@ useEffect(() => {
     const newPreviews: string[] = [];
     newImages.forEach((file) => {
       const reader = new FileReader();
-      reader.onload = (e) => {
-        newPreviews.push(e.target?.result as string);
+      reader.onload = (ev) => {
+        newPreviews.push(ev.target?.result as string);
         if (newPreviews.length === newImages.length) {
           setImagePreviews(newPreviews);
         }
@@ -96,12 +158,20 @@ useEffect(() => {
       reader.readAsDataURL(file);
     });
 
+    // Reset state for a fresh run
     setKeywords([]);
     setError("");
-    // Reset results when new images are added
     setResults([]);
     setFinalResults([]);
     setOriginalResults([]);
+    setCategorized({
+      top: [],
+      bottom: [],
+      jacket: [],
+      footwear: [],
+      accessory: [],
+    });
+    setItemAttrs({});
   };
 
   const removeImage = (index: number) => {
@@ -133,8 +203,6 @@ useEffect(() => {
         });
 
         const data = await res.json();
-        console.log("data:", data);
-
         if (data.keywords) {
           allKeywords = [...data.keywords];
         } else {
@@ -149,6 +217,7 @@ useEffect(() => {
 
       if (uniqueKeywords.length > 0) {
         setImageIndex(i);
+        // kick off search for this inspiration image
         setTimeout(() => handleSearch(uniqueKeywords, i), 0);
       } else {
         setError("No keywords found from uploaded images.");
@@ -158,22 +227,135 @@ useEffect(() => {
     setLoading(false);
   };
 
-  const handleCategorize = async(item: EbayItem, category: Category) => {
-  setCategorized(prev => ({
-    ...prev,
-    [category]: [...prev[category], item]
-  }));
-}
+  const handleCategorize = (item: EbayItem, category: Category) => {
+    setCategorized((prev) => ({
+      ...prev,
+      [category]: [...prev[category], item],
+    }));
+  };
 
-  const handleSearch = async (keywordsOverride?: string[], currentImageIndex: number = 0) => {
+  // ------- Classification of returned items -------
+
+  async function urlToBlob(url: string): Promise<Blob> {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`image fetch failed: ${r.status}`);
+    return await r.blob();
+  }
+
+  async function classifyItem(item: EbayItem): Promise<ItemAttrs | null> {
+    try {
+      const imgUrl = item.image?.imageUrl;
+      if (!imgUrl) return null;
+      const blob = await urlToBlob(imgUrl);
+
+      const fd = new FormData();
+      fd.append("image", blob, "item.jpg");
+      fd.append("title", item.title || "");
+
+      const res = await fetch("/api/extract-categories", {
+        method: "POST",
+        body: fd,
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as ItemAttrs;
+
+      return {
+        category: data.category,
+        colorCategory: data.colorCategory,
+        formality: data.formality,
+      };
+    } catch (e) {
+      console.warn("classifyItem error:", e);
+      return null;
+    }
+  }
+
+  function guessCategoryFromTitle(title: string): Category | null {
+    const t = (title || "").toLowerCase();
+    if (/(shoe|sneaker|boot|heel|sandal|loafer|cleat|pump|mule)/.test(t)) return "footwear";
+    if (/(jacket|coat|parka|blazer|trench|windbreaker|puffer)/.test(t)) return "jacket";
+    if (/(jean|pant|trouser|chino|legging|short|skirt|cargo|culotte)/.test(t)) return "bottom";
+    if (/(shirt|tee|t\-shirt|blouse|sweater|hoodie|crewneck|cardigan|tank|top|polo)/.test(t)) return "top";
+    if (/dress/.test(t)) return "top";
+    if (/(bag|belt|hat|cap|scarf|sunglass|watch|ring|necklace|earring|bracelet|wallet)/.test(t)) return "accessory";
+    return null;
+  }
+
+  // batch classify top-N CLIP items with a small concurrency limit
+  async function classifyAndBucket(items: EbayItem[], maxToClassify = 40, concurrency = 4) {
+    const slice = items.slice(0, maxToClassify);
+    const queue = [...slice];
+    const running: Promise<void>[] = [];
+
+    const runOne = async (it: EbayItem) => {
+      const attrs = await classifyItem(it);
+      const key = getKey(it);
+      if (attrs) {
+        if (attrs.category) handleCategorize(it, attrs.category);
+        setItemAttrs(prev => ({ ...prev, [key]: attrs }));
+      }
+    };
+
+    while (queue.length > 0 || running.length > 0) {
+      while (queue.length > 0 && running.length < concurrency) {
+        const it = queue.shift()!;
+        const p = runOne(it).finally(() => {
+          const idx = running.indexOf(p);
+          if (idx >= 0) running.splice(idx, 1);
+        });
+        running.push(p);
+      }
+      // eslint-disable-next-line no-await-in-loop
+      await Promise.race(running);
+    }
+
+    // 🔁 Backfill thin categories using titles, so tops/bottoms don't stay sparse.
+    const MIN_PER = 5;
+
+    const curr = { ...categorized };
+    const counts = {
+      top: curr.top.length,
+      bottom: curr.bottom.length,
+      jacket: curr.jacket.length,
+      footwear: curr.footwear.length,
+      accessory: curr.accessory.length
+    };
+
+    const need: Partial<Record<Category, number>> = {};
+    (["top","bottom","jacket"] as Category[]).forEach(cat => {
+      if (counts[cat] < MIN_PER) need[cat] = MIN_PER - counts[cat];
+    });
+
+    if (Object.keys(need).length) {
+      for (const it of items) {
+        const key = getKey(it);
+        const alreadyHasAttrs = itemAttrs[key];
+        // skip already-classified items
+        if (alreadyHasAttrs?.category) continue;
+
+        const g = guessCategoryFromTitle(it.title || "");
+        if (g && need[g] && need[g]! > 0) {
+          handleCategorize(it, g);
+          setItemAttrs(prev => ({ ...prev, [key]: { ...prev[key], category: g }}));
+          need[g]!--;
+        }
+        if (Object.values(need).every(x => (x || 0) <= 0)) break;
+      }
+    }
+  }
+
+  // ------- Search flow -------
+
+  const handleSearch = async (
+    keywordsOverride?: string[],
+    currentImageIndex: number = 0
+  ) => {
     const effectiveKeywords = keywordsOverride || keywords;
     if (effectiveKeywords.length === 0) return;
 
     setLoading(true);
-    const itemCategory = effectiveKeywords[0];
 
     const searchQuery = effectiveKeywords.join(" ");
-    console.log(searchQuery);
     const queryParams = new URLSearchParams({
       q: searchQuery,
       minPrice: filters.minPrice,
@@ -187,56 +369,55 @@ useEffect(() => {
       const res = await fetch(`/api/search-ebay?${queryParams}`);
       const data = (await res.json()) as import("../lib/types").SearchEbayResponse;
       const ebayItems = data.itemSummaries || [];
-      console.log("_____________________")
-      console.log("EBAY RESPONSE STRUCTURE", ebayItems)
-      console.log("_____________________")
-
 
       if (ebayItems.length === 0 || imagePreviews.length === 0) {
-        setResults(prev => [...prev, ...ebayItems]);
-        setFinalResults(prev => [...prev, ...ebayItems]);
+        setResults((prev) => [...prev, ...ebayItems]);
+        setFinalResults((prev) => [...prev, ...ebayItems]);
         return;
       }
 
-      setOriginalResults(prev => [...prev, ...ebayItems]);
-      
+      setOriginalResults((prev) => [...prev, ...ebayItems]);
+
       try {
+        // CLIP rerank against this particular inspiration image
         const form = new FormData();
-        form.append('image', images[currentImageIndex]);
-        form.append('ebayItems', JSON.stringify(ebayItems));
-        console.log("FORM: ", form);
+        form.append("image", images[currentImageIndex]);
+        form.append("ebayItems", JSON.stringify(ebayItems));
 
         const clipRes = await fetch("/api/clip-rerank", {
           method: "POST",
           body: form,
         });
 
-        const response = (await clipRes.json()) as import("../lib/types").ClipRerankResponse;
-        
+        const response =
+          (await clipRes.json()) as import("../lib/types").ClipRerankResponse;
+
         if (response.items) {
-          const topTwo = response.items.slice(0, 2);
-          await handleCategorize(topTwo[0], itemCategory as Category);
-          if (topTwo[1]) await handleCategorize(topTwo[1], itemCategory as Category);
-          
-          setResults(prev => [...prev, ...response.items]);
-          setFinalResults(prev => [...prev, ...response.items]);
+          // 1) Classify a meaningful chunk of the *reranked* list → fill many buckets
+          await classifyAndBucket(response.items, 40, 4);
+
+          // 2) Keep usual UI state
+          setResults((prev) => [...prev, ...response.items]);
+          setFinalResults((prev) => [...prev, ...response.items]);
           setClipDebugInfo(response.debug);
-          
-          
-          
-          if (response.debug) {
-            console.log(`CLIP processed ${response.debug.validEbayEmbeddings}/${response.debug.totalItems} items`);
-            console.log(`Score range: ${response.debug.scoreStats?.min?.toFixed(4)} - ${response.debug.scoreStats?.max?.toFixed(4)}`);
-            console.log(`Position changes: ${response.debug.positionChanges}`);
-          }
+
+          // if (response.debug) {
+          //   console.log(
+          //     `CLIP processed ${response.debug.validEbayEmbeddings}/${response.debug.totalItems} items`
+          //   );
+          //   console.log(
+          //     `Score range: ${response.debug.scoreStats?.min?.toFixed(4)} - ${response.debug.scoreStats?.max?.toFixed(4)}`
+          //   );
+          //   console.log(`Position changes: ${response.debug.positionChanges}`);
+          // }
         } else {
-          setResults(prev => [...prev, ...ebayItems]);
-          setFinalResults(prev => [...prev, ...ebayItems]);
+          setResults((prev) => [...prev, ...ebayItems]);
+          setFinalResults((prev) => [...prev, ...ebayItems]);
         }
       } catch (err) {
         console.error("CLIP rerank failed:", err);
-        setResults(prev => [...prev, ...ebayItems]);
-        setFinalResults(prev => [...prev, ...ebayItems]);
+        setResults((prev) => [...prev, ...ebayItems]);
+        setFinalResults((prev) => [...prev, ...ebayItems]);
       }
     } catch (err) {
       setError("Search failed");
@@ -246,21 +427,26 @@ useEffect(() => {
   };
 
   const handleFilterChange = (key: keyof FilterOptions, value: any) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
+    setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
-  const toggleArrayFilter = (key: 'colors' | 'sizes' | 'brands', value: string) => {
-    setFilters(prev => ({
+  const toggleArrayFilter = (
+    key: "colors" | "sizes" | "brands",
+    value: string
+  ) => {
+    setFilters((prev) => ({
       ...prev,
       [key]: prev[key].includes(value)
-        ? prev[key].filter(item => item !== value)
-        : [...prev[key], value]
+        ? prev[key].filter((item) => item !== value)
+        : [...prev[key], value],
     }));
   };
 
   function getRerankChangeCount(original: EbayItem[], reranked: EbayItem[]) {
     return original.filter((item, i) => reranked[i] !== item).length;
   }
+
+  // ------- UI -------
 
   return (
     <>
@@ -300,13 +486,21 @@ useEffect(() => {
                   id="image-upload"
                   className="file-input"
                 />
-                {images.length >= 20 && <p className="limit-msg">Max 20 images allowed</p>}
+                {images.length >= 20 && (
+                  <p className="limit-msg">Max 20 images allowed</p>
+                )}
 
                 <label htmlFor="image-upload" className="upload-button">
-                  <svg className="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="17,8 12,3 7,8"/>
-                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  <svg
+                    className="upload-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17,8 12,3 7,8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
                   </svg>
                   Choose Images
                 </label>
@@ -321,9 +515,14 @@ useEffect(() => {
                         className="remove-button"
                         onClick={() => removeImage(index)}
                       >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <line x1="18" y1="6" x2="6" y2="18"/>
-                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
                         </svg>
                       </button>
                     </div>
@@ -344,9 +543,15 @@ useEffect(() => {
                     </>
                   ) : (
                     <>
-                      <svg className="analyze-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M9 12l2 2 4-4"/>
-                        <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c2.27 0 4.33.84 5.9 2.24"/>
+                      <svg
+                        className="analyze-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M9 12l2 2 4-4" />
+                        <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c2.27 0 4.33.84 5.9 2.24" />
                       </svg>
                       Analyze Style
                     </>
@@ -356,19 +561,7 @@ useEffect(() => {
             </div>
           </section>
 
-          {/* Keywords Section */}
-          {keywords.length > 0 && (
-            <section className="keywords-section">
-              <h3>Style Elements Found</h3>
-              <div className="keywords-grid">
-                {keywords.map((keyword, index) => (
-                  <span key={index} className="keyword-tag">{keyword}</span>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Filters Section */}
+          {/* Filters Section
           {keywords.length > 0 && (
             <section className="filters-section">
               <div className="filters-header">
@@ -378,8 +571,14 @@ useEffect(() => {
                   onClick={() => setShowFilters(!showFilters)}
                 >
                   Filters
-                  <svg className={`arrow ${showFilters ? 'rotated' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="6,9 12,15 18,9"/>
+                  <svg
+                    className={`arrow ${showFilters ? "rotated" : ""}`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <polyline points="6,9 12,15 18,9" />
                   </svg>
                 </button>
               </div>
@@ -394,14 +593,18 @@ useEffect(() => {
                           type="number"
                           placeholder="Min"
                           value={filters.minPrice}
-                          onChange={(e) => handleFilterChange('minPrice', e.target.value)}
+                          onChange={(e) =>
+                            handleFilterChange("minPrice", e.target.value)
+                          }
                         />
                         <span>–</span>
                         <input
                           type="number"
                           placeholder="Max"
                           value={filters.maxPrice}
-                          onChange={(e) => handleFilterChange('maxPrice', e.target.value)}
+                          onChange={(e) =>
+                            handleFilterChange("maxPrice", e.target.value)
+                          }
                         />
                       </div>
                     </div>
@@ -410,7 +613,9 @@ useEffect(() => {
                       <label>Condition</label>
                       <select
                         value={filters.condition}
-                        onChange={(e) => handleFilterChange('condition', e.target.value)}
+                        onChange={(e) =>
+                          handleFilterChange("condition", e.target.value)
+                        }
                       >
                         <option value="all">All</option>
                         <option value="new">New</option>
@@ -423,7 +628,9 @@ useEffect(() => {
                       <label>Sort By</label>
                       <select
                         value={filters.sortBy}
-                        onChange={(e) => handleFilterChange('sortBy', e.target.value)}
+                        onChange={(e) =>
+                          handleFilterChange("sortBy", e.target.value)
+                        }
                       >
                         <option value="relevance">Relevance</option>
                         <option value="price_low">Price ↑</option>
@@ -436,20 +643,33 @@ useEffect(() => {
                   <div className="filter-group colors-group">
                     <label>Colors</label>
                     <div className="color-filters">
-                      {colorOptions.map(color => (
+                      {colorOptions.map((color) => (
                         <button
                           key={color}
-                          className={`color-button ${filters.colors.includes(color) ? 'active' : ''}`}
-                          onClick={() => toggleArrayFilter('colors', color)}
+                          className={`color-button ${
+                            filters.colors.includes(color) ? "active" : ""
+                          }`}
+                          onClick={() => toggleArrayFilter("colors", color)}
                           style={{
-                            backgroundColor: color.toLowerCase() === 'white' ? '#f8f9fa' : color.toLowerCase(),
-                            border: color.toLowerCase() === 'white' ? '2px solid #e9ecef' : 'none'
+                            backgroundColor:
+                              color.toLowerCase() === "white"
+                                ? "#f8f9fa"
+                                : color.toLowerCase(),
+                            border:
+                              color.toLowerCase() === "white"
+                                ? "2px solid #e9ecef"
+                                : "none",
                           }}
                           title={color}
                         >
                           {filters.colors.includes(color) && (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                              <polyline points="20,6 9,17 4,12"/>
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="3"
+                            >
+                              <polyline points="20,6 9,17 4,12" />
                             </svg>
                           )}
                         </button>
@@ -457,9 +677,9 @@ useEffect(() => {
                     </div>
                   </div>
                 </div>
-              )}
+              )} */}
 
-              <button
+              {/* <button
                 className="search-button"
                 onClick={() => handleSearch(keywords)}
                 disabled={loading || keywords.length === 0}
@@ -471,32 +691,42 @@ useEffect(() => {
                   </>
                 ) : (
                   <>
-                    <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="11" cy="11" r="8"/>
-                      <path d="m21 21-4.35-4.35"/>
+                    <svg
+                      className="search-icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <circle cx="11" cy="11" r="8" />
+                      <path d="m21 21-4.35-4.35" />
                     </svg>
                     Find Similar Items
                   </>
                 )}
               </button>
             </section>
-          )}
+          )} */}
 
-          {/* Error Display */}
+          {/* Error */}
           {error && (
             <div className="error-message">
-              <svg className="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="15" y1="9" x2="9" y2="15"/>
-                <line x1="9" y1="9" x2="15" y2="15"/>
+              <svg
+                className="error-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <line x1="15" y1="9" x2="9" y2="15" />
+                <line x1="9" y1="9" x2="15" y2="15" />
               </svg>
               {error}
             </div>
           )}
 
-          <h2>Outfit Suggestions</h2>
-          {/* Add this right after <h2>Outfit Suggestions</h2> */}
-          {/* Add this right after <h2>Outfit Suggestions</h2> */}
+          {/* Outfit Suggestions */}
           {outfitSuggestions.length > 0 && (
             <section className="outfit-suggestions-section">
               <div className="outfits-grid">
@@ -504,35 +734,40 @@ useEffect(() => {
                   <div key={index} className="outfit-card">
                     <div className="outfit-header">
                       <div className="outfit-info">
-                        <h3>{outfit.name}</h3>
-                        <p className="outfit-description">{outfit.description}</p>
+                        {/* <h3>{outfit.name}</h3> */}
+                        {/* <p className="outfit-description">
+                          {outfit.description}
+                        </p> */}
                       </div>
-                      {outfit.totalPrice && (
+                      {outfit.totalPrice !== undefined && (
                         <div className="outfit-total">
                           Total: ${outfit.totalPrice.toFixed(2)}
                         </div>
                       )}
                     </div>
-                    
+
                     <div className="outfit-items-container">
                       <div className="outfit-items">
                         {outfit.items.map((item, itemIndex) => (
-                          <a 
-                            key={itemIndex} 
-                            href={item.webUrl} 
-                            target="_blank" 
+                          <a
+                            key={itemIndex}
+                            href={item.webUrl}
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="outfit-item"
                           >
-                            <img 
-                              src={item.image?.imageUrl || "/placeholder.png"} 
+                            <img
+                              src={item.image?.imageUrl || "/placeholder.png"}
                               alt={item.title}
                               className="outfit-item-image"
                             />
                             <div className="outfit-item-details">
                               <h4>{item.title}</h4>
                               <p className="price">
-                                {item.price?.currency === 'USD' ? '$' : item.price?.currency} {item.price?.value}
+                                {item.price?.currency === "USD"
+                                  ? "$"
+                                  : item.price?.currency}{" "}
+                                {item.price?.value}
                               </p>
                             </div>
                           </a>
@@ -545,46 +780,7 @@ useEffect(() => {
             </section>
           )}
 
-          <h2>Original Results</h2>
-          {originalResults.length > 0 && (
-            <section className="results-section">
-              <h3>{originalResults.length} Similar Items Found</h3>
-              <div className="results-grid">
-                {originalResults.map((item, index) => (
-                  <div key={index} className="result-card">
-                    <div className="image-container">
-                      <a 
-                            key={index} 
-                            href={item.webUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="outfit-item"
-                          >
-                          <img
-                        src={item.image?.imageUrl || "/placeholder.png"}
-                        alt={item.title}
-                        className="result-image"
-                      />
-                          </a>
-                      
-                      <div>Original rank: #{index + 1}</div>
-                    </div>
-                    <div className="item-details">
-                      <h4 className="item-title">{item.title}</h4>
-                      <div className="price-container">
-                        <span className="price">
-                          {item.price?.currency === 'USD' ? '$' : item.price?.currency} {item.price?.value}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Results Section */}
-          <h2>CLIP Reranked Results</h2>
+          {/* Results */}
           {results.length > 0 && (
             <section className="results-section">
               <h3>{results.length} Similar Items Found</h3>
@@ -592,26 +788,29 @@ useEffect(() => {
                 {results.map((item, index) => (
                   <div key={index} className="result-card">
                     <div className="image-container">
-                      <a 
-                            key={index} 
-                            href={item.webUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="outfit-item"
-                          >
-                          <img
-                        src={item.image?.imageUrl || "/placeholder.png"}
-                        alt={item.title}
-                        className="result-image"
-                      />
-                          </a>
+                      <a
+                        key={index}
+                        href={item.webUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="outfit-item"
+                      >
+                        <img
+                          src={item.image?.imageUrl || "/placeholder.png"}
+                          alt={item.title}
+                          className="result-image"
+                        />
+                      </a>
                       <div>CLIP rank: #{index + 1}</div>
                     </div>
                     <div className="item-details">
                       <h4 className="item-title">{item.title}</h4>
                       <div className="price-container">
                         <span className="price">
-                          {item.price?.currency === 'USD' ? '$' : item.price?.currency} {item.price?.value}
+                          {item.price?.currency === "USD"
+                            ? "$"
+                            : item.price?.currency}{" "}
+                          {item.price?.value}
                         </span>
                       </div>
                     </div>
@@ -623,58 +822,86 @@ useEffect(() => {
 
           {originalResults.length > 0 && results.length > 0 && (
             <div style={{ margin: "1rem 0", fontWeight: "bold" }}>
-              🔍 {getRerankChangeCount(originalResults, results)} items changed position after CLIP rerank
+              🔍 {getRerankChangeCount(originalResults, results)} items changed
+              position after CLIP rerank
             </div>
           )}
 
+          {/* Debug */}
           {clipDebugInfo && (
-            <section className="debug-section" style={{
-              margin: '2rem 0',
-              padding: '1rem',
-              backgroundColor: '#f8f9fa',
-              borderRadius: '8px',
-              fontFamily: 'monospace',
-              fontSize: '0.9rem'
-            }}>
+            <section
+              className="debug-section"
+              style={{
+                margin: "2rem 0",
+                padding: "1rem",
+                backgroundColor: "#f8f9fa",
+                borderRadius: "8px",
+                fontFamily: "monospace",
+                fontSize: "0.9rem",
+              }}
+            >
               <h3>🔍 CLIP Debug Info</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(auto-fit, minmax(200px, 1fr))",
+                  gap: "1rem",
+                }}
+              >
                 <div>
-                  <strong>Images:</strong><br/>
-                  Uploaded: {clipDebugInfo.uploadedImages}<br/>
+                  <strong>Images:</strong>
+                  <br />
+                  Uploaded: {clipDebugInfo.uploadedImages}
+                  <br />
                   Valid inspiration: {clipDebugInfo.validInspiration}
                 </div>
                 <div>
-                  <strong>eBay Items:</strong><br/>
-                  Total: {clipDebugInfo.totalItems}<br/>
+                  <strong>eBay Items:</strong>
+                  <br />
+                  Total: {clipDebugInfo.totalItems}
+                  <br />
                   Successfully processed: {clipDebugInfo.validEbayEmbeddings}
                 </div>
                 {clipDebugInfo.scoreStats && (
                   <div>
-                    <strong>Similarity Scores:</strong><br/>
-                    Min: {clipDebugInfo.scoreStats.min?.toFixed(4)}<br/>
-                    Max: {clipDebugInfo.scoreStats.max?.toFixed(4)}<br/>
+                    <strong>Similarity Scores:</strong>
+                    <br />
+                    Min: {clipDebugInfo.scoreStats.min?.toFixed(4)}
+                    <br />
+                    Max: {clipDebugInfo.scoreStats.max?.toFixed(4)}
+                    <br />
                     Avg: {clipDebugInfo.scoreStats.avg?.toFixed(4)}
                   </div>
                 )}
                 <div>
-                  <strong>Reranking:</strong><br/>
-                  Position changes: {clipDebugInfo.positionChanges}<br/>
-                  Effectiveness: {clipDebugInfo.rerankEffectiveness?.toFixed(2)}
+                  <strong>Reranking:</strong>
+                  <br />
+                  Position changes: {clipDebugInfo.positionChanges}
+                  <br />
+                  Effectiveness:{" "}
+                  {clipDebugInfo.rerankEffectiveness?.toFixed(2)}
                 </div>
               </div>
-              
+
               {clipDebugInfo.failedEbayUrls?.length > 0 && (
-                <details style={{ marginTop: '1rem' }}>
-                  <summary>❌ Failed URLs ({clipDebugInfo.failedEbayUrls.length})</summary>
-                  <ul style={{ maxHeight: '200px', overflow: 'auto' }}>
-                    {clipDebugInfo.failedEbayUrls.map((url: string, i: number) => (
-                      <li key={i} style={{ wordBreak: 'break-all' }}>{url}</li>
-                    ))}
+                <details style={{ marginTop: "1rem" }}>
+                  <summary>
+                    ❌ Failed URLs ({clipDebugInfo.failedEbayUrls.length})
+                  </summary>
+                  <ul style={{ maxHeight: "200px", overflow: "auto" }}>
+                    {clipDebugInfo.failedEbayUrls.map(
+                      (url: string, i: number) => (
+                        <li key={i} style={{ wordBreak: "break-all" }}>
+                          {url}
+                        </li>
+                      )
+                    )}
                   </ul>
                 </details>
               )}
-              
-              <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: '#666' }}>
+
+              <div style={{ marginTop: "1rem", fontSize: "0.8rem", color: "#666" }}>
                 💡 Check browser console for detailed logs
               </div>
             </section>

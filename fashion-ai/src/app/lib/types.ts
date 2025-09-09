@@ -22,6 +22,7 @@ export type OutfitSuggestion = {
   items: EbayItem[];
   totalPrice?: number;
   description: string;
+  compatibilityScore?: number;
 };
 
 
